@@ -162,6 +162,7 @@ import {
 import { singleFlightSessionResume } from '../use-prompt-actions/single-flight-resume'
 
 import { branchCreateKey } from './branch-create-key'
+import { branchParams } from './branch-params'
 import { sessionCreateOverrideParams, type SessionCreateOverrides, type SessionSeedMessage } from './create-overrides'
 import { markSessionCreatedThisRun, sessionCreatedThisRun } from './created-this-run'
 import { captureDisplayHydration } from './display-hydration'
@@ -2725,13 +2726,7 @@ export function useSessionActions({
 
         // No title: the backend auto-names the branch from its parent's lineage.
         if (!createFlight) {
-          const branchParams = {
-            session_id: sourceSessionId,
-            // Stable per-attempt key: a lost-response retry of session.branch /
-            // session.branch_whole returns the SAME child (#65410).
-            idempotency_key: key,
-            ...(branchCount !== undefined ? { count: branchCount } : {})
-          }
+          const branchRequest = branchParams({ branchCount, branchMessages, key, sourceSessionId })
 
           const createParams = {
             cols: 96,
@@ -2748,13 +2743,13 @@ export function useSessionActions({
             sourceSessionId
               ? requestBranchGateway<SessionCreateResponse>(
                   branchCount === undefined ? 'session.branch_whole' : 'session.branch',
-                  branchParams
+                  branchRequest
                 ).catch(err => {
                   if (!isMissingRpcMethod(err)) {
                     throw err
                   }
 
-                  return requestBranchGateway<SessionCreateResponse>('session.branch', branchParams)
+                  return requestBranchGateway<SessionCreateResponse>('session.branch', branchRequest)
                 })
               : branchMessages.length
                 ? requestBranchGateway<SessionCreateResponse>('session.create', {

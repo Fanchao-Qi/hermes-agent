@@ -73,6 +73,24 @@ def _branch_source_history(db, session: dict, old_key: str) -> list:
     return history or _visible_branch_history(in_memory_history)
 
 
+def _truncate_branch_history(history: list, params: dict) -> list:
+    """Cut the copied rows at the clicked message.
+
+    ``through_row_id`` addresses the last stored row of the clicked bubble. ``count`` is the legacy
+    fallback and is only exact when no bubble folds several assistant rows (tool turns do: the renderer
+    shows one bubble, the store keeps one text row per narration/answer), so a bubble count undercuts
+    the row list and the branch lands earlier than the clicked message.
+    """
+    row_id = params.get("through_row_id")
+    if isinstance(row_id, int) and not isinstance(row_id, bool):
+        for idx, message in enumerate(history):
+            if message.get("_row_id") == row_id:
+                return history[: idx + 1]
+    if isinstance(count := params.get("count"), int) and count > 0:
+        return history[:count]
+    return history
+
+
 def _branch_live(rid, params: dict, session: dict, *, omit_messages: bool = False) -> dict:
     # Idempotency (#65410, same registry as session.create): a client retrying a
     # branch whose first response was lost gets the SAME child, not a duplicate.
@@ -97,8 +115,7 @@ def _branch_live(rid, params: dict, session: dict, *, omit_messages: bool = Fals
         history = _branch_source_history(db, session, old_key)
         if not history:
             return _err(rid, 4008, "nothing to branch — send a message first")
-        if isinstance(count := params.get("count"), int) and count > 0:
-            history = history[:count]
+        history = _truncate_branch_history(history, params)
         new_key, new_sid, source = _new_session_key(), uuid.uuid4().hex[:8], _session_source(session)
         try:
             title = params.get("name", "") or _branch_title(db, old_key)
